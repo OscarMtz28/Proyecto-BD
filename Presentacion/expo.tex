@@ -1,0 +1,244 @@
+\documentclass{beamer}
+\usepackage[spanish]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{listings}
+\usepackage{xcolor}
+\usetheme{Madrid}
+
+% Configuración para código SQL
+\lstset{
+    language=SQL,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{green},
+    stringstyle=\color{red},
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    tabsize=2
+}
+
+\title{Conceptos Avanzados en PostgreSQL}
+\subtitle{Triggers, Índices y Stored Procedures}
+\author{Tu Nombre}
+\date{\today}
+
+\begin{document}
+
+\begin{frame}
+\titlepage
+\end{frame}
+
+\begin{frame}{Contenido}
+\tableofcontents
+\end{frame}
+
+\section{Introducción}
+\begin{frame}{Introducción}
+\begin{block}{¿Qué veremos hoy?}
+Tres poderosas herramientas de PostgreSQL para mejorar el rendimiento y la funcionalidad de tus bases de datos:
+\begin{itemize}
+\item Triggers (Disparadores)
+\item Índices
+\item Stored Procedures (Procedimientos Almacenados)
+\end{itemize}
+\end{block}
+\end{frame}
+
+\section{Triggers}
+\begin{frame}{¿Qué son los Triggers?}
+\begin{block}{Definición}
+Un trigger (disparador) es un procedimiento que se ejecuta automáticamente cuando ocurre un evento específico en una tabla o vista.
+\end{block}
+
+\begin{itemize}
+\item Se activan antes o después de INSERT, UPDATE, DELETE
+\item Pueden ser por fila o por sentencia
+\item Útiles para auditoría, integridad compleja, réplicas
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Ejemplo de Trigger}
+\begin{lstlisting}
+-- Crear una función para el trigger
+CREATE OR REPLACE FUNCTION registrar_cambios()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (TG_OP = 'DELETE') THEN
+        INSERT INTO auditoria(tabla, accion, viejo_valor)
+        VALUES (TG_TABLE_NAME, 'DELETE', OLD.*);
+        RETURN OLD;
+    ELSIF (TG_OP = 'UPDATE') THEN
+        INSERT INTO auditoria(tabla, accion, viejo_valor, nuevo_valor)
+        VALUES (TG_TABLE_NAME, 'UPDATE', OLD.*, NEW.*);
+        RETURN NEW;
+    ELSIF (TG_OP = 'INSERT') THEN
+        INSERT INTO auditoria(tabla, accion, nuevo_valor)
+        VALUES (TG_TABLE_NAME, 'INSERT', NEW.*);
+        RETURN NEW;
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Crear el Trigger}
+\begin{lstlisting}
+-- Asociar el trigger a una tabla
+CREATE TRIGGER trigger_auditoria
+AFTER INSERT OR UPDATE OR DELETE ON empleados
+FOR EACH ROW EXECUTE FUNCTION registrar_cambios();
+\end{lstlisting}
+
+\begin{block}{Ventajas}
+\begin{itemize}
+\item Automatización de tareas
+\item Mantenimiento de la integridad de datos
+\item Auditoría de cambios
+\end{itemize}
+\end{block}
+\end{frame}
+
+\section{Índices}
+\begin{frame}{¿Qué son los Índices?}
+\begin{block}{Definición}
+Estructuras de datos que mejoran la velocidad de las operaciones de recuperación en una tabla.
+\end{block}
+
+\begin{itemize}
+\item Similar al índice de un libro
+\item Acelera SELECT pero puede ralentizar INSERT/UPDATE/DELETE
+\item PostgreSQL soporta varios tipos: B-tree, Hash, GiST, SP-GiST, GIN, BRIN
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Tipos de Índices}
+\begin{lstlisting}
+-- Índice B-tree (predeterminado, bueno para comparaciones)
+CREATE INDEX idx_empleados_nombre ON empleados(nombre);
+
+-- Índice Hash (solo para igualdad)
+CREATE INDEX idx_empleados_email ON empleados USING HASH(email);
+
+-- Índice GIN (bueno para datos compuestos como arrays)
+CREATE INDEX idx_productos_etiquetas ON productos USING GIN(etiquetas);
+
+-- Índice parcial (solo para un subconjunto)
+CREATE INDEX idx_empleados_activos ON empleados(id) 
+WHERE activo = true;
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}{Cuándo usar Índices}
+\begin{block}{Recomendaciones}
+\begin{itemize}
+\item Columnas usadas frecuentemente en WHERE
+\item Columnas usadas en JOINs
+\item Columnas con UNIQUE constraints
+\item Columnas usadas en ORDER BY
+\end{itemize}
+\end{block}
+
+\begin{alertblock}{Precaución}
+No indexar todo indiscriminadamente. Cada índice ocupa espacio y ralentiza escrituras.
+\end{alertblock}
+\end{frame}
+
+\section{Stored Procedures}
+\begin{frame}{¿Qué son los Stored Procedures?}
+\begin{block}{Definición}
+Bloques de código SQL almacenados en el servidor que pueden ser invocados por aplicaciones.
+\end{block}
+
+\begin{itemize}
+\item Escritos en PL/pgSQL (u otros lenguajes como Python, Perl)
+\item Pueden contener lógica compleja
+\item Mejoran el rendimiento al ejecutarse en el servidor
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Ejemplo de Stored Procedure}
+\begin{lstlisting}
+CREATE OR REPLACE FUNCTION aumentar_salario(
+    porcentaje float,
+    depto_id integer
+) RETURNS void AS $$
+BEGIN
+    -- Aumentar salario a empleados del departamento
+    UPDATE empleados
+    SET salario = salario * (1 + porcentaje/100)
+    WHERE departamento_id = depto_id;
+    
+    -- Registrar el cambio
+    INSERT INTO historico_salarios(
+        fecha, departamento_id, porcentaje
+    ) VALUES (NOW(), depto_id, porcentaje);
+END;
+$$ LANGUAGE plpgsql;
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Llamando un Stored Procedure}
+\begin{lstlisting}
+-- Llamar al procedimiento
+CALL aumentar_salario(5.0, 10);
+
+-- O usando SELECT para funciones que retornan valores
+SELECT * FROM obtener_empleados_por_departamento(10);
+\end{lstlisting}
+
+\begin{block}{Ventajas}
+\begin{itemize}
+\item Encapsulación de lógica de negocio
+\item Mayor seguridad (ocultan detalles de implementación)
+\item Mejor rendimiento (menos viajes cliente-servidor)
+\end{itemize}
+\end{block}
+\end{frame}
+
+\section{Comparación}
+\begin{frame}{Comparación de Conceptos}
+\begin{table}
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Característica} & \textbf{Triggers} & \textbf{Stored Procedures} \\
+\hline
+Ejecución & Automática & Manual (llamada explícita) \\
+\hline
+Propósito & Reacción a eventos & Encapsular lógica \\
+\hline
+Retorno & Generalmente no & Puede retornar valores \\
+\hline
+Parámetros & Implícitos (NEW, OLD) & Explícitos \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{block}{Índices}
+Los índices son estructuras pasivas que mejoran el rendimiento, no contienen lógica.
+\end{block}
+\end{frame}
+
+\section{Conclusión}
+\begin{frame}{Conclusión}
+\begin{itemize}
+\item \textbf{Triggers}: Automatizan acciones ante eventos en la BD
+\item \textbf{Índices}: Mejoran el rendimiento de consultas (con trade-offs)
+\item \textbf{Stored Procedures}: Encapsulan lógica compleja en el servidor
+\end{itemize}
+
+\begin{block}{Recomendación final}
+Usa estas herramientas estratégicamente para construir bases de datos más eficientes, seguras y mantenibles.
+\end{block}
+\end{frame}
+
+\begin{frame}{Preguntas}
+\centering
+¿Preguntas?
+\end{frame}
+
+\end{document}
