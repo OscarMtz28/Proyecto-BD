@@ -292,6 +292,10 @@ INPUT .\imagenes\ubi.png
 INPUT .\imagenes\ubi.png
 INPUT .\imagenes\ubi.png
 INPUT .\imagenes\ubi.png
+INPUT .\secciones\mision.tex
+INPUT .\secciones\mision.tex
+INPUT secciones\mision.tex
+INPUT C:\Program Files\MiKTeX\fonts\tfm\public\cm\cmr12.tfm
 INPUT Proyecto.aux
 INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmbx10.pfb
 INPUT C:\Program Files\MiKTeX\fonts\type1\public\amsfonts\cm\cmbx10.pfb
