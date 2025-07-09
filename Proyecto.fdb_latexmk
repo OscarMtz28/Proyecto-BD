@@ -1,5 +1,5 @@
 # Fdb version 4
-["pdflatex"] 1752035518.59926 "c:/Users/marti/OneDrive/Desktop/Proyecto BD/Proyecto.tex" "Proyecto.pdf" "Proyecto" 1752035519.52783 0
+["pdflatex"] 1752036938.84788 "c:/Users/marti/OneDrive/Desktop/Proyecto BD/Proyecto.tex" "Proyecto.pdf" "Proyecto" 1752036939.81651 0
   "C:/Program Files/MiKTeX/fonts/tfm/public/cm/cmbx10.tfm" 1136765053 1328 c834bbb027764024c09d3d2bf908b5f0 ""
   "C:/Program Files/MiKTeX/fonts/tfm/public/cm/cmbx12.tfm" 1136765053 1324 c910af8c371558dc20f2d7822f66fe64 ""
   "C:/Program Files/MiKTeX/fonts/tfm/public/cm/cmcsc10.tfm" 1136765053 1300 63a6111ee6274895728663cf4b4e7e81 ""
@@ -148,13 +148,14 @@
   "C:/Program Files/MiKTeX/tex/lualatex/plantuml/plantuml.sty" 1748081594 3731 46977536ac1c5b00e55a09f95144e4de ""
   "C:/Users/marti/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map" 1750631186 80909 eab91d9745dd2edfd62a31d53cd5fe15 ""
   "C:/Users/marti/AppData/Local/MiKTeX/miktex/data/le/pdftex/pdflatex.fmt" 1750631488 13225203 0a12f372c280e4f3a937785a34cfe71f ""
-  "Proyecto.aux" 1752035519 269 b6b94b051efd99282ee03803fa816093 "pdflatex"
+  "Proyecto.aux" 1752036939 269 3fabe746aa0ffae9d8437230fe7aac41 "pdflatex"
   "Proyecto.tex" 1752035385 895 34179d1dabe63725e29b6b77633683d3 ""
   "c:/Users/marti/OneDrive/Desktop/Proyecto BD/Proyecto.tex" 1752035385 895 34179d1dabe63725e29b6b77633683d3 ""
   "imagenes/logo.png" 1748465630 18479 fef5194bcfc40f6808b837dcc058d1e2 ""
+  "imagenes/ubi.png" 1752035307 708632 7ab5da0a9aecf4606134e00987dd911e ""
   "pythontex-files-Proyecto/Proyecto.pytxmcr" 0 -1 0 ""
   "secciones/introduccion.tex" 1752035518 791 cbefd3cb4104b9d6baedc83dd53e2942 ""
-  "secciones/problematica.tex" 1752035518 135 4ef0cc1aa3addc586329c654bd62fdfc ""
+  "secciones/problematica.tex" 1752036938 2543 ffae83eaa6bdd68f9c9323582fa8d398 ""
   (generated)
   "Proyecto.aux"
   "Proyecto.log"
