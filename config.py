@@ -3,7 +3,7 @@ DB_CONFIG = {
     'host': 'localhost',
     'database': 'dulceria',
     'user': 'postgres',
-    'password': '58154927',  # Cambiar por tu contraseña
+    'password': '',  # Cambiar por tu contraseña
     'port': 5432
 }
 
