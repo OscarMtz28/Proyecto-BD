@@ -15,6 +15,16 @@ class DulceriaApp:
         # Configuración de la base de datos
         self.db_config = DB_CONFIG
         
+        # Variables para control de ordenamiento
+        self.productos_sort_column = None
+        self.productos_sort_reverse = False
+        self.clientes_sort_column = None
+        self.clientes_sort_reverse = False
+        self.ventas_sort_column = None
+        self.ventas_sort_reverse = False
+        self.inventario_sort_column = None
+        self.inventario_sort_reverse = False
+        
         self.setup_ui()
         
     def setup_ui(self):
@@ -85,6 +95,7 @@ class DulceriaApp:
         tk.Button(buttons_frame, text="Agregar", command=self.agregar_producto, bg='#27ae60', fg='white', width=12).pack(side='left', padx=5)
         tk.Button(buttons_frame, text="Actualizar", command=self.actualizar_producto, bg='#3498db', fg='white', width=12).pack(side='left', padx=5)
         tk.Button(buttons_frame, text="Eliminar", command=self.eliminar_producto, bg='#e74c3c', fg='white', width=12).pack(side='left', padx=5)
+        tk.Button(buttons_frame, text="Reactivar", command=self.reactivar_producto, bg='#f39c12', fg='white', width=12).pack(side='left', padx=5)
         tk.Button(buttons_frame, text="Limpiar", command=self.limpiar_productos, bg='#95a5a6', fg='white', width=12).pack(side='left', padx=5)
         
         # Tabla de productos
@@ -95,7 +106,7 @@ class DulceriaApp:
         self.productos_tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=15)
         
         for col in columns:
-            self.productos_tree.heading(col, text=col)
+            self.productos_tree.heading(col, text=col, command=lambda c=col: self.ordenar_productos(c))
             self.productos_tree.column(col, width=120)
         
         scrollbar_productos = ttk.Scrollbar(table_frame, orient='vertical', command=self.productos_tree.yview)
@@ -175,7 +186,7 @@ class DulceriaApp:
             conn.close()
     
     def eliminar_producto(self):
-        """Eliminar producto seleccionado"""
+        """Eliminar producto seleccionado en cascada (elimina todo el historial relacionado)"""
         selected = self.productos_tree.selection()
         if not selected:
             messagebox.showwarning("Advertencia", "Seleccione un producto para eliminar")
@@ -183,8 +194,93 @@ class DulceriaApp:
             
         item = self.productos_tree.item(selected[0])
         producto_nombre = item['values'][1]
+        producto_id = item['values'][0]
         
-        if messagebox.askyesno("Confirmar", f"¿Está seguro de eliminar el producto '{producto_nombre}'?\n\nEsta acción no se puede deshacer."):
+        conn = self.get_db_connection()
+        if not conn:
+            return
+            
+        try:
+            cursor = conn.cursor()
+            
+            # Obtener información sobre registros relacionados
+            cursor.execute("SELECT COUNT(*) FROM Detalle_Venta WHERE id_producto=%s", (producto_id,))
+            ventas_count = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM Inventario WHERE id_producto=%s", (producto_id,))
+            inventario_count = cursor.fetchone()[0]
+            
+            # Mostrar advertencia detallada
+            mensaje_confirmacion = f"¿Está seguro de eliminar COMPLETAMENTE el producto '{producto_nombre}'?\n\n"
+            mensaje_confirmacion += "⚠️  ELIMINACIÓN EN CASCADA:\n"
+            mensaje_confirmacion += f"• Producto: {producto_nombre}\n"
+            
+            if ventas_count > 0:
+                mensaje_confirmacion += f"• {ventas_count} registro(s) de ventas\n"
+            
+            if inventario_count > 0:
+                mensaje_confirmacion += f"• {inventario_count} registro(s) de inventario\n"
+            
+            mensaje_confirmacion += "\n🚨 ESTA ACCIÓN NO SE PUEDE DESHACER\n"
+            mensaje_confirmacion += "Se eliminará TODO el historial relacionado con este producto."
+            
+            if messagebox.askyesno("⚠️ ELIMINACIÓN EN CASCADA", mensaje_confirmacion):
+                
+                # Iniciar transacción para eliminación en cascada
+                cursor.execute("BEGIN")
+                
+                # 1. Eliminar detalles de venta relacionados
+                if ventas_count > 0:
+                    cursor.execute("DELETE FROM Detalle_Venta WHERE id_producto=%s", (producto_id,))
+                    print(f"Eliminados {cursor.rowcount} detalles de venta")
+                
+                # 2. Eliminar registros de inventario
+                if inventario_count > 0:
+                    cursor.execute("DELETE FROM Inventario WHERE id_producto=%s", (producto_id,))
+                    print(f"Eliminados {cursor.rowcount} registros de inventario")
+                
+                # 3. Finalmente eliminar el producto
+                cursor.execute("DELETE FROM Productos WHERE id_producto=%s", (producto_id,))
+                
+                # Confirmar transacción
+                conn.commit()
+                
+                # Mensaje de éxito detallado
+                mensaje_exito = f"Producto '{producto_nombre}' eliminado completamente:\n"
+                if ventas_count > 0:
+                    mensaje_exito += f"✅ {ventas_count} registro(s) de ventas eliminados\n"
+                if inventario_count > 0:
+                    mensaje_exito += f"✅ {inventario_count} registro(s) de inventario eliminados\n"
+                mensaje_exito += "✅ Producto eliminado de la base de datos"
+                
+                messagebox.showinfo("Eliminación Exitosa", mensaje_exito)
+                
+                self.cargar_productos()
+                self.limpiar_productos()
+                
+        except Exception as e:
+            conn.rollback()
+            messagebox.showerror("Error", f"Error al eliminar producto en cascada: {str(e)}")
+        finally:
+            conn.close()
+    
+    def reactivar_producto(self):
+        """Reactivar producto desactivado"""
+        selected = self.productos_tree.selection()
+        if not selected:
+            messagebox.showwarning("Advertencia", "Seleccione un producto para reactivar")
+            return
+            
+        item = self.productos_tree.item(selected[0])
+        producto_nombre = item['values'][1]
+        producto_activo = item['values'][5]
+        
+        # Verificar si el producto ya está activo
+        if producto_activo:
+            messagebox.showinfo("Información", f"El producto '{producto_nombre}' ya está activo")
+            return
+        
+        if messagebox.askyesno("Confirmar", f"¿Está seguro de reactivar el producto '{producto_nombre}'?"):
             producto_id = item['values'][0]
             
             conn = self.get_db_connection()
@@ -193,37 +289,15 @@ class DulceriaApp:
                 
             try:
                 cursor = conn.cursor()
-                
-                # Verificar si el producto tiene ventas asociadas
-                cursor.execute("SELECT COUNT(*) FROM Detalle_Venta WHERE id_producto=%s", (producto_id,))
-                ventas_count = cursor.fetchone()[0]
-                
-                if ventas_count > 0:
-                    # Si tiene ventas, solo desactivar para mantener integridad referencial
-                    if messagebox.askyesno("Producto con Ventas", 
-                                         f"Este producto tiene {ventas_count} venta(s) registrada(s).\n\n"
-                                         "¿Desea desactivarlo en lugar de eliminarlo?\n"
-                                         "(Recomendado para mantener el historial de ventas)"):
-                        cursor.execute("UPDATE Productos SET activo=FALSE WHERE id_producto=%s", (producto_id,))
-                        conn.commit()
-                        messagebox.showinfo("Éxito", "Producto desactivado correctamente")
-                    else:
-                        return
-                else:
-                    # Si no tiene ventas, eliminar completamente
-                    # Primero eliminar del inventario si existe
-                    cursor.execute("DELETE FROM Inventario WHERE id_producto=%s", (producto_id,))
-                    # Luego eliminar el producto
-                    cursor.execute("DELETE FROM Productos WHERE id_producto=%s", (producto_id,))
-                    conn.commit()
-                    messagebox.showinfo("Éxito", "Producto eliminado completamente")
-                
+                cursor.execute("UPDATE Productos SET activo=TRUE WHERE id_producto=%s", (producto_id,))
+                conn.commit()
+                messagebox.showinfo("Éxito", f"Producto '{producto_nombre}' reactivado correctamente")
                 self.cargar_productos()
                 self.limpiar_productos()
                 
             except Exception as e:
                 conn.rollback()
-                messagebox.showerror("Error", f"Error al eliminar producto: {str(e)}")
+                messagebox.showerror("Error", f"Error al reactivar producto: {str(e)}")
             finally:
                 conn.close()
     
@@ -283,6 +357,46 @@ class DulceriaApp:
         finally:
             conn.close()
 
+    def ordenar_productos(self, col):
+        """Ordenar tabla de productos por columna"""
+        # Determinar si cambiar dirección de ordenamiento
+        if self.productos_sort_column == col:
+            self.productos_sort_reverse = not self.productos_sort_reverse
+        else:
+            self.productos_sort_column = col
+            self.productos_sort_reverse = False
+        
+        # Obtener todos los elementos
+        items = [(self.productos_tree.set(child, col), child) for child in self.productos_tree.get_children('')]
+        
+        # Ordenar según el tipo de columna
+        if col in ['ID', 'Precio']:
+            # Ordenamiento numérico
+            items.sort(key=lambda x: float(x[0]) if x[0] and str(x[0]).replace('.', '').replace('-', '').isdigit() else 0, 
+                      reverse=self.productos_sort_reverse)
+        else:
+            # Ordenamiento alfabético
+            items.sort(key=lambda x: str(x[0]).lower(), reverse=self.productos_sort_reverse)
+        
+        # Reorganizar elementos en el treeview
+        for index, (val, child) in enumerate(items):
+            self.productos_tree.move(child, '', index)
+        
+        # Actualizar indicador visual en la cabecera
+        self.actualizar_cabecera_productos(col)
+    
+    def actualizar_cabecera_productos(self, col):
+        """Actualizar indicador visual de ordenamiento en cabeceras de productos"""
+        columns = ('ID', 'Nombre', 'Descripción', 'Precio', 'Categoría', 'Activo')
+        for column in columns:
+            if column == col:
+                # Agregar flecha indicadora
+                arrow = " ↓" if self.productos_sort_reverse else " ↑"
+                self.productos_tree.heading(column, text=column + arrow)
+            else:
+                # Remover flecha de otras columnas
+                self.productos_tree.heading(column, text=column)
+
     def create_clientes_tab(self):
         """Pestaña de gestión de clientes"""
         clientes_frame = ttk.Frame(self.notebook)
@@ -335,7 +449,7 @@ class DulceriaApp:
         self.clientes_tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=15)
         
         for col in columns:
-            self.clientes_tree.heading(col, text=col)
+            self.clientes_tree.heading(col, text=col, command=lambda c=col: self.ordenar_clientes(c))
             self.clientes_tree.column(col, width=120)
         
         scrollbar_clientes = ttk.Scrollbar(table_frame, orient='vertical', command=self.clientes_tree.yview)
@@ -511,6 +625,46 @@ class DulceriaApp:
         finally:
             conn.close()
 
+    def ordenar_clientes(self, col):
+        """Ordenar tabla de clientes por columna"""
+        # Determinar si cambiar dirección de ordenamiento
+        if self.clientes_sort_column == col:
+            self.clientes_sort_reverse = not self.clientes_sort_reverse
+        else:
+            self.clientes_sort_column = col
+            self.clientes_sort_reverse = False
+        
+        # Obtener todos los elementos
+        items = [(self.clientes_tree.set(child, col), child) for child in self.clientes_tree.get_children('')]
+        
+        # Ordenar según el tipo de columna
+        if col in ['ID', 'Puntos']:
+            # Ordenamiento numérico
+            items.sort(key=lambda x: int(x[0]) if x[0] and str(x[0]).isdigit() else 0, 
+                      reverse=self.clientes_sort_reverse)
+        else:
+            # Ordenamiento alfabético
+            items.sort(key=lambda x: str(x[0]).lower(), reverse=self.clientes_sort_reverse)
+        
+        # Reorganizar elementos en el treeview
+        for index, (val, child) in enumerate(items):
+            self.clientes_tree.move(child, '', index)
+        
+        # Actualizar indicador visual en la cabecera
+        self.actualizar_cabecera_clientes(col)
+    
+    def actualizar_cabecera_clientes(self, col):
+        """Actualizar indicador visual de ordenamiento en cabeceras de clientes"""
+        columns = ('ID', 'Nombre', 'Apellido', 'Teléfono', 'Email', 'Puntos')
+        for column in columns:
+            if column == col:
+                # Agregar flecha indicadora
+                arrow = " ↓" if self.clientes_sort_reverse else " ↑"
+                self.clientes_tree.heading(column, text=column + arrow)
+            else:
+                # Remover flecha de otras columnas
+                self.clientes_tree.heading(column, text=column)
+
     def create_ventas_tab(self):
         """Pestaña de gestión de ventas"""
         ventas_frame = ttk.Frame(self.notebook)
@@ -596,7 +750,7 @@ class DulceriaApp:
         self.ventas_tree = ttk.Treeview(ventas_realizadas_frame, columns=columns_ventas, show='headings', height=10)
         
         for col in columns_ventas:
-            self.ventas_tree.heading(col, text=col)
+            self.ventas_tree.heading(col, text=col, command=lambda c=col: self.ordenar_ventas(c))
             self.ventas_tree.column(col, width=120)
         
         scrollbar_ventas = ttk.Scrollbar(ventas_realizadas_frame, orient='vertical', command=self.ventas_tree.yview)
@@ -813,6 +967,53 @@ class DulceriaApp:
         finally:
             conn.close()
 
+    def ordenar_ventas(self, col):
+        """Ordenar tabla de ventas por columna"""
+        # Determinar si cambiar dirección de ordenamiento
+        if self.ventas_sort_column == col:
+            self.ventas_sort_reverse = not self.ventas_sort_reverse
+        else:
+            self.ventas_sort_column = col
+            self.ventas_sort_reverse = False
+        
+        # Obtener todos los elementos
+        items = [(self.ventas_tree.set(child, col), child) for child in self.ventas_tree.get_children('')]
+        
+        # Ordenar según el tipo de columna
+        if col == 'ID':
+            # Ordenamiento numérico para ID
+            items.sort(key=lambda x: int(x[0]) if x[0] and str(x[0]).isdigit() else 0, 
+                      reverse=self.ventas_sort_reverse)
+        elif col == 'Total':
+            # Ordenamiento numérico para Total (remover $ y convertir)
+            items.sort(key=lambda x: float(x[0].replace('$', '')) if x[0] and '$' in str(x[0]) else 0, 
+                      reverse=self.ventas_sort_reverse)
+        elif col == 'Fecha':
+            # Ordenamiento por fecha
+            items.sort(key=lambda x: x[0] if x[0] else '', reverse=self.ventas_sort_reverse)
+        else:
+            # Ordenamiento alfabético para Cliente y Método Pago
+            items.sort(key=lambda x: str(x[0]).lower(), reverse=self.ventas_sort_reverse)
+        
+        # Reorganizar elementos en el treeview
+        for index, (val, child) in enumerate(items):
+            self.ventas_tree.move(child, '', index)
+        
+        # Actualizar indicador visual en la cabecera
+        self.actualizar_cabecera_ventas(col)
+    
+    def actualizar_cabecera_ventas(self, col):
+        """Actualizar indicador visual de ordenamiento en cabeceras de ventas"""
+        columns = ('ID', 'Cliente', 'Fecha', 'Total', 'Método Pago')
+        for column in columns:
+            if column == col:
+                # Agregar flecha indicadora
+                arrow = " ↓" if self.ventas_sort_reverse else " ↑"
+                self.ventas_tree.heading(column, text=column + arrow)
+            else:
+                # Remover flecha de otras columnas
+                self.ventas_tree.heading(column, text=column)
+
     def create_inventario_tab(self):
         """Pestaña de gestión de inventario"""
         inventario_frame = ttk.Frame(self.notebook)
@@ -851,7 +1052,7 @@ class DulceriaApp:
         self.inventario_tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=20)
         
         for col in columns:
-            self.inventario_tree.heading(col, text=col)
+            self.inventario_tree.heading(col, text=col, command=lambda c=col: self.ordenar_inventario(c))
             self.inventario_tree.column(col, width=150)
         
         scrollbar_inventario = ttk.Scrollbar(table_frame, orient='vertical', command=self.inventario_tree.yview)
@@ -940,6 +1141,49 @@ class DulceriaApp:
             messagebox.showerror("Error", f"Error al reponer inventario: {str(e)}")
         finally:
             conn.close()
+
+    def ordenar_inventario(self, col):
+        """Ordenar tabla de inventario por columna"""
+        # Determinar si cambiar dirección de ordenamiento
+        if self.inventario_sort_column == col:
+            self.inventario_sort_reverse = not self.inventario_sort_reverse
+        else:
+            self.inventario_sort_column = col
+            self.inventario_sort_reverse = False
+        
+        # Obtener todos los elementos
+        items = [(self.inventario_tree.set(child, col), child) for child in self.inventario_tree.get_children('')]
+        
+        # Ordenar según el tipo de columna
+        if col in ['ID', 'Cantidad']:
+            # Ordenamiento numérico
+            items.sort(key=lambda x: int(x[0]) if x[0] and str(x[0]).isdigit() else 0, 
+                      reverse=self.inventario_sort_reverse)
+        elif col == 'Última Actualización':
+            # Ordenamiento por fecha
+            items.sort(key=lambda x: x[0] if x[0] else '', reverse=self.inventario_sort_reverse)
+        else:
+            # Ordenamiento alfabético para Producto y Ubicación
+            items.sort(key=lambda x: str(x[0]).lower(), reverse=self.inventario_sort_reverse)
+        
+        # Reorganizar elementos en el treeview
+        for index, (val, child) in enumerate(items):
+            self.inventario_tree.move(child, '', index)
+        
+        # Actualizar indicador visual en la cabecera
+        self.actualizar_cabecera_inventario(col)
+    
+    def actualizar_cabecera_inventario(self, col):
+        """Actualizar indicador visual de ordenamiento en cabeceras de inventario"""
+        columns = ('ID', 'Producto', 'Cantidad', 'Ubicación', 'Última Actualización')
+        for column in columns:
+            if column == col:
+                # Agregar flecha indicadora
+                arrow = " ↓" if self.inventario_sort_reverse else " ↑"
+                self.inventario_tree.heading(column, text=column + arrow)
+            else:
+                # Remover flecha de otras columnas
+                self.inventario_tree.heading(column, text=column)
     
     def cargar_inventario(self):
         """Cargar inventario en la tabla"""
