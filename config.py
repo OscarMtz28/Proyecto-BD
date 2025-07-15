@@ -3,7 +3,7 @@ DB_CONFIG = {
     'host': 'localhost',
     'database': 'dulceria',
     'user': 'postgres',
-    'password': 'Magia2000',  # Cambiar por tu contraseña
+    'password': '',  # Cambiar por tu contraseña
     'port': 5432
 }
 

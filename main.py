@@ -181,8 +181,10 @@ class DulceriaApp:
             messagebox.showwarning("Advertencia", "Seleccione un producto para eliminar")
             return
             
-        if messagebox.askyesno("Confirmar", "¿Está seguro de eliminar este producto?"):
-            item = self.productos_tree.item(selected[0])
+        item = self.productos_tree.item(selected[0])
+        producto_nombre = item['values'][1]
+        
+        if messagebox.askyesno("Confirmar", f"¿Está seguro de eliminar el producto '{producto_nombre}'?\n\nEsta acción no se puede deshacer."):
             producto_id = item['values'][0]
             
             conn = self.get_db_connection()
@@ -191,11 +193,36 @@ class DulceriaApp:
                 
             try:
                 cursor = conn.cursor()
-                cursor.execute("UPDATE Productos SET activo=FALSE WHERE id_producto=%s", (producto_id,))
-                conn.commit()
-                messagebox.showinfo("Éxito", "Producto desactivado correctamente")
+                
+                # Verificar si el producto tiene ventas asociadas
+                cursor.execute("SELECT COUNT(*) FROM Detalle_Venta WHERE id_producto=%s", (producto_id,))
+                ventas_count = cursor.fetchone()[0]
+                
+                if ventas_count > 0:
+                    # Si tiene ventas, solo desactivar para mantener integridad referencial
+                    if messagebox.askyesno("Producto con Ventas", 
+                                         f"Este producto tiene {ventas_count} venta(s) registrada(s).\n\n"
+                                         "¿Desea desactivarlo en lugar de eliminarlo?\n"
+                                         "(Recomendado para mantener el historial de ventas)"):
+                        cursor.execute("UPDATE Productos SET activo=FALSE WHERE id_producto=%s", (producto_id,))
+                        conn.commit()
+                        messagebox.showinfo("Éxito", "Producto desactivado correctamente")
+                    else:
+                        return
+                else:
+                    # Si no tiene ventas, eliminar completamente
+                    # Primero eliminar del inventario si existe
+                    cursor.execute("DELETE FROM Inventario WHERE id_producto=%s", (producto_id,))
+                    # Luego eliminar el producto
+                    cursor.execute("DELETE FROM Productos WHERE id_producto=%s", (producto_id,))
+                    conn.commit()
+                    messagebox.showinfo("Éxito", "Producto eliminado completamente")
+                
                 self.cargar_productos()
+                self.limpiar_productos()
+                
             except Exception as e:
+                conn.rollback()
                 messagebox.showerror("Error", f"Error al eliminar producto: {str(e)}")
             finally:
                 conn.close()

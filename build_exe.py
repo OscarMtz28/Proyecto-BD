@@ -170,7 +170,103 @@ pause >nul
     
     print("📦 Script de instalación mejorado creado: dist/instalar.bat")
 
+def copy_distribution_files():
+    """Copiar archivos necesarios para la distribución"""
+    print("📁 Copiando archivos de distribución...")
+    
+    files_to_copy = [
+        ("config.py", "dist/config.py"),
+        ("README_INSTALACION.txt", "dist/README_INSTALACION.txt"),
+        ("requirements.txt", "dist/requirements.txt")
+    ]
+    
+    folders_to_copy = [
+        ("SQL FILES", "dist/SQL FILES"),
+        ("imagenes", "dist/imagenes")
+    ]
+    
+    # Copiar archivos individuales
+    for src, dst in files_to_copy:
+        if os.path.exists(src):
+            shutil.copy2(src, dst)
+            print(f"✅ Copiado: {src} → {dst}")
+        else:
+            print(f"⚠️  No encontrado: {src}")
+    
+    # Copiar carpetas
+    for src, dst in folders_to_copy:
+        if os.path.exists(src):
+            if os.path.exists(dst):
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst)
+            print(f"✅ Copiado: {src}/ → {dst}/")
+        else:
+            print(f"⚠️  No encontrada: {src}/")
+    
+    print("📦 Archivos de distribución copiados")
+
+def create_distribution_readme():
+    """Crear README específico para la distribución"""
+    readme_content = """========================================
+    SISTEMA DE GESTIÓN - DULCERÍA
+    Paquete de Distribución v1.0
+========================================
+
+📁 CONTENIDO DEL PAQUETE:
+----------------------------------------
+SistemaDulceria.exe     - Aplicación principal
+config.py               - Configuración (EDITAR ANTES DE USAR)
+instalar.bat           - Verificador e instalador
+README_INSTALACION.txt  - Guía completa de instalación
+SQL FILES/             - Scripts de base de datos
+imagenes/              - Recursos gráficos
+
+🚀 INSTALACIÓN RÁPIDA:
+----------------------------------------
+1. Ejecuta instalar.bat
+2. Sigue las instrucciones en pantalla
+3. Edita config.py con tus credenciales
+4. Ejecuta SistemaDulceria.exe
+
+📋 REQUISITOS:
+----------------------------------------
+- Windows 10/11 (64-bit)
+- PostgreSQL 12+ instalado y ejecutándose
+- 4GB RAM mínimo
+- 100MB espacio libre
+
+📞 SOPORTE:
+----------------------------------------
+Lee README_INSTALACION.txt para instrucciones detalladas
+Ejecuta instalar.bat para diagnóstico automático
+
+========================================
+¡Disfruta tu nuevo sistema de gestión!
+========================================"""
+    
+    with open("dist/LEEME.txt", "w", encoding="utf-8") as f:
+        f.write(readme_content)
+    
+    print("📄 README de distribución creado: dist/LEEME.txt")
+
 if __name__ == "__main__":
     if build_executable():
         create_installer_script()
-        print("\n🚀 ¡Todo listo para distribuir!")
+        copy_distribution_files()
+        create_distribution_readme()
+        
+        print("\n🎉 ¡DISTRIBUCIÓN COMPLETA!")
+        print("=" * 50)
+        print("📦 Archivos listos en la carpeta 'dist/':")
+        print("   ✅ SistemaDulceria.exe")
+        print("   ✅ config.py")
+        print("   ✅ instalar.bat")
+        print("   ✅ README_INSTALACION.txt")
+        print("   ✅ LEEME.txt")
+        print("   ✅ SQL FILES/")
+        print("   ✅ imagenes/")
+        print("\n🚀 Para distribuir:")
+        print("   1. Comprime la carpeta 'dist/' en un ZIP")
+        print("   2. Envía el ZIP al usuario final")
+        print("   3. El usuario debe ejecutar instalar.bat primero")
+        print("\n✨ ¡Todo listo para distribuir!")
