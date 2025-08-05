@@ -698,8 +698,13 @@ class DulceriaApp:
         producto_select_frame.pack(fill='x', padx=5, pady=5)
         
         tk.Label(producto_select_frame, text="Producto:", bg='white').pack(side='left')
-        self.venta_producto = ttk.Combobox(producto_select_frame, width=30, state='readonly')
+        self.venta_producto = ttk.Combobox(producto_select_frame, width=30)
         self.venta_producto.pack(side='left', padx=5)
+        
+        # Configurar búsqueda en tiempo real
+        self.venta_producto.bind('<KeyRelease>', self.filtrar_productos)
+        self.venta_producto.bind('<Button-1>', self.mostrar_todos_productos)
+        self.venta_producto.bind('<FocusIn>', self.mostrar_todos_productos)
         
         tk.Label(producto_select_frame, text="Cantidad:", bg='white').pack(side='left', padx=5)
         self.venta_cantidad = tk.Entry(producto_select_frame, width=10)
@@ -759,6 +764,9 @@ class DulceriaApp:
         self.ventas_tree.pack(side='left', fill='both', expand=True)
         scrollbar_ventas.pack(side='right', fill='y')
         
+        # Lista completa de productos para filtrado
+        self.productos_completos = []
+        
         # Cargar datos iniciales
         self.cargar_clientes_combo()
         self.cargar_productos_combo()
@@ -795,7 +803,14 @@ class DulceriaApp:
             productos = cursor.fetchall()
             
             producto_values = [f"{producto[0]} - {producto[1]} (${producto[2]})" for producto in productos]
+            
+            # Guardar lista completa para filtrado
+            self.productos_completos = producto_values.copy()
+            
+            # Configurar valores en el combobox
             self.venta_producto['values'] = producto_values
+            
+            print(f"Productos cargados: {len(producto_values)}")  # Debug
             
         except Exception as e:
             messagebox.showerror("Error", f"Error al cargar productos: {str(e)}")
@@ -935,6 +950,47 @@ class DulceriaApp:
         self.venta_cantidad.delete(0, tk.END)
         self.productos_venta = []
         self.actualizar_tabla_venta()
+    
+    def filtrar_productos(self, event):
+        """Filtrar productos en tiempo real mientras se escribe"""
+        # Verificar que la lista de productos esté cargada
+        if not hasattr(self, 'productos_completos') or not self.productos_completos:
+            return
+            
+        texto_busqueda = self.venta_producto.get().lower().strip()
+        
+        if not texto_busqueda:
+            # Si no hay texto, mostrar todos los productos
+            productos_filtrados = self.productos_completos
+        else:
+            # Filtrar productos que contengan el texto buscado
+            productos_filtrados = [
+                producto for producto in self.productos_completos
+                if texto_busqueda in producto.lower()
+            ]
+        
+        # Actualizar los valores del combobox
+        self.venta_producto['values'] = productos_filtrados
+        
+        # Debug: mostrar cuántos productos se encontraron
+        print(f"Búsqueda: '{texto_busqueda}' - Encontrados: {len(productos_filtrados)}")
+        
+        # Si hay resultados y hay texto de búsqueda, mostrar el dropdown
+        if productos_filtrados and texto_busqueda:
+            try:
+                # Intentar abrir el dropdown
+                self.venta_producto.event_generate('<Button-1>')
+                self.venta_producto.event_generate('<ButtonRelease-1>')
+            except:
+                pass
+    
+    def mostrar_todos_productos(self, event):
+        """Mostrar todos los productos cuando se hace clic en el combobox"""
+        # Verificar que la lista de productos esté cargada
+        if hasattr(self, 'productos_completos') and self.productos_completos:
+            # Solo restaurar todos los productos si el campo está vacío
+            if not self.venta_producto.get():
+                self.venta_producto['values'] = self.productos_completos
     
     def cargar_ventas(self):
         """Cargar ventas en la tabla"""
