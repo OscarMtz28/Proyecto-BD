@@ -1,9 +1,14 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 import psycopg2
 from datetime import datetime
 import json
 from config import DB_CONFIG, APP_CONFIG
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.units import inch
 
 class DulceriaApp:
     def __init__(self, root):
@@ -1295,6 +1300,17 @@ class DulceriaApp:
         tk.Button(buttons_frame, text="Ventas del Mes", command=self.reporte_ventas_mes, 
                  bg='#1abc9c', fg='white', width=20).pack(side='left', padx=5)
         
+        # Botón para exportar PDF
+        export_frame = tk.Frame(control_frame, bg='white')
+        export_frame.pack(pady=10)
+        
+        tk.Button(export_frame, text="Exportar Reporte a PDF", command=self.exportar_reporte_pdf, 
+                 bg='#e74c3c', fg='white', width=25, font=('Arial', 10, 'bold')).pack()
+        
+        # Variable para almacenar el último reporte generado
+        self.ultimo_reporte = None
+        self.tipo_ultimo_reporte = None
+        
         # Área de resultados
         self.reportes_text = tk.Text(reportes_frame, height=25, font=('Courier', 10))
         self.reportes_text.pack(fill='both', expand=True, padx=10, pady=10)
@@ -1321,6 +1337,10 @@ class DulceriaApp:
                 LIMIT 10
             """)
             resultados = cursor.fetchall()
+            
+            # Guardar datos para exportación PDF
+            self.ultimo_reporte = resultados
+            self.tipo_ultimo_reporte = "productos_vendidos"
             
             reporte = "PRODUCTOS MÁS VENDIDOS\n"
             reporte += "=" * 60 + "\n\n"
@@ -1359,6 +1379,10 @@ class DulceriaApp:
             """)
             resultados = cursor.fetchall()
             
+            # Guardar datos para exportación PDF
+            self.ultimo_reporte = resultados
+            self.tipo_ultimo_reporte = "ventas_cliente"
+            
             reporte = "VENTAS POR CLIENTE\n"
             reporte += "=" * 80 + "\n\n"
             reporte += f"{'Cliente':<25} {'Compras':<8} {'Total Gastado':<15} {'Puntos':<8}\n"
@@ -1391,6 +1415,10 @@ class DulceriaApp:
                 ORDER BY i.cantidad ASC
             """)
             resultados = cursor.fetchall()
+            
+            # Guardar datos para exportación PDF
+            self.ultimo_reporte = resultados
+            self.tipo_ultimo_reporte = "stock_bajo"
             
             reporte = "PRODUCTOS CON STOCK BAJO (< 20 unidades)\n"
             reporte += "=" * 70 + "\n\n"
@@ -1438,6 +1466,10 @@ class DulceriaApp:
             """)
             totales = cursor.fetchone()
             
+            # Guardar datos para exportación PDF
+            self.ultimo_reporte = {'resultados': resultados, 'totales': totales}
+            self.tipo_ultimo_reporte = "ventas_mes"
+            
             reporte = f"VENTAS DEL MES - {datetime.now().strftime('%B %Y').upper()}\n"
             reporte += "=" * 60 + "\n\n"
             reporte += f"RESUMEN DEL MES:\n"
@@ -1456,6 +1488,183 @@ class DulceriaApp:
             messagebox.showerror("Error", f"Error al generar reporte: {str(e)}")
         finally:
             conn.close()
+    
+    def exportar_reporte_pdf(self):
+        """Exportar el último reporte generado a PDF"""
+        if not self.ultimo_reporte or not self.tipo_ultimo_reporte:
+            messagebox.showwarning("Advertencia", "Primero debe generar un reporte antes de exportarlo")
+            return
+        
+        # Solicitar ubicación del archivo
+        archivo = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            filetypes=[("PDF files", "*.pdf")],
+            title="Guardar reporte como PDF"
+        )
+        
+        if not archivo:
+            return
+        
+        try:
+            # Crear el documento PDF
+            doc = SimpleDocTemplate(archivo, pagesize=A4)
+            styles = getSampleStyleSheet()
+            story = []
+            
+            # Título principal
+            titulo_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=18,
+                spaceAfter=30,
+                alignment=1,  # Centrado
+                textColor=colors.darkblue
+            )
+            
+            # Agregar contenido según el tipo de reporte
+            if self.tipo_ultimo_reporte == "productos_vendidos":
+                self._generar_pdf_productos_vendidos(story, styles, titulo_style)
+            elif self.tipo_ultimo_reporte == "ventas_cliente":
+                self._generar_pdf_ventas_cliente(story, styles, titulo_style)
+            elif self.tipo_ultimo_reporte == "stock_bajo":
+                self._generar_pdf_stock_bajo(story, styles, titulo_style)
+            elif self.tipo_ultimo_reporte == "ventas_mes":
+                self._generar_pdf_ventas_mes(story, styles, titulo_style)
+            
+            # Generar el PDF
+            doc.build(story)
+            messagebox.showinfo("Éxito", f"Reporte exportado exitosamente a:\n{archivo}")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al exportar PDF: {str(e)}")
+    
+    def _generar_pdf_productos_vendidos(self, story, styles, titulo_style):
+        """Generar PDF para reporte de productos más vendidos"""
+        story.append(Paragraph("REPORTE DE PRODUCTOS MÁS VENDIDOS", titulo_style))
+        story.append(Spacer(1, 20))
+        
+        # Fecha del reporte
+        fecha_actual = datetime.now().strftime("%d/%m/%Y %H:%M")
+        story.append(Paragraph(f"Fecha de generación: {fecha_actual}", styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # Crear tabla
+        data = [['Producto', 'Cantidad Vendida', 'Ingresos Totales']]
+        for producto, cantidad, ingresos in self.ultimo_reporte:
+            data.append([producto, str(cantidad), f"${ingresos:.2f}"])
+        
+        table = Table(data, colWidths=[3*inch, 1.5*inch, 1.5*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        story.append(table)
+    
+    def _generar_pdf_ventas_cliente(self, story, styles, titulo_style):
+        """Generar PDF para reporte de ventas por cliente"""
+        story.append(Paragraph("REPORTE DE VENTAS POR CLIENTE", titulo_style))
+        story.append(Spacer(1, 20))
+        
+        # Fecha del reporte
+        fecha_actual = datetime.now().strftime("%d/%m/%Y %H:%M")
+        story.append(Paragraph(f"Fecha de generación: {fecha_actual}", styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # Crear tabla
+        data = [['Cliente', 'Compras', 'Total Gastado', 'Puntos']]
+        for cliente, compras, total, puntos in self.ultimo_reporte:
+            data.append([cliente, str(compras), f"${total:.2f}", str(puntos)])
+        
+        table = Table(data, colWidths=[2.5*inch, 1*inch, 1.5*inch, 1*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        story.append(table)
+    
+    def _generar_pdf_stock_bajo(self, story, styles, titulo_style):
+        """Generar PDF para reporte de stock bajo"""
+        story.append(Paragraph("REPORTE DE PRODUCTOS CON STOCK BAJO", titulo_style))
+        story.append(Spacer(1, 20))
+        
+        # Fecha del reporte
+        fecha_actual = datetime.now().strftime("%d/%m/%Y %H:%M")
+        story.append(Paragraph(f"Fecha de generación: {fecha_actual}", styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        if not self.ultimo_reporte:
+            story.append(Paragraph("¡Excelente! Todos los productos tienen stock suficiente.", styles['Normal']))
+            return
+        
+        # Crear tabla
+        data = [['Producto', 'Stock', 'Ubicación', 'Categoría']]
+        for producto, stock, ubicacion, categoria in self.ultimo_reporte:
+            data.append([producto, str(stock), ubicacion or 'N/A', categoria or 'N/A'])
+        
+        table = Table(data, colWidths=[2*inch, 1*inch, 1.5*inch, 1.5*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        story.append(table)
+    
+    def _generar_pdf_ventas_mes(self, story, styles, titulo_style):
+        """Generar PDF para reporte de ventas del mes"""
+        mes_actual = datetime.now().strftime('%B %Y').upper()
+        story.append(Paragraph(f"REPORTE DE VENTAS DEL MES - {mes_actual}", titulo_style))
+        story.append(Spacer(1, 20))
+        
+        # Fecha del reporte
+        fecha_actual = datetime.now().strftime("%d/%m/%Y %H:%M")
+        story.append(Paragraph(f"Fecha de generación: {fecha_actual}", styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # Resumen del mes
+        totales = self.ultimo_reporte['totales']
+        story.append(Paragraph("RESUMEN DEL MES:", styles['Heading2']))
+        story.append(Paragraph(f"Total de ventas: {totales[0]}", styles['Normal']))
+        story.append(Paragraph(f"Ingresos totales: ${totales[1]:.2f}", styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # Crear tabla de ventas diarias
+        data = [['Fecha', 'Ventas', 'Total del Día']]
+        for fecha, ventas, total in self.ultimo_reporte['resultados']:
+            data.append([str(fecha), str(ventas), f"${total:.2f}"])
+        
+        table = Table(data, colWidths=[2*inch, 1.5*inch, 1.5*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        story.append(table)
 
 if __name__ == "__main__":
     root = tk.Tk()
